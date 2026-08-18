@@ -1,0 +1,18 @@
+2026-08-18 18:05:02,812 [INFO] ===== myNSE200 nightly run started: 2026-08-18 18:05:02.812780 =====
+2026-08-18 18:05:02,814 [INFO] Universe size: 200 symbols.
+2026-08-18 18:05:02,817 [INFO] Failed to create TzCache, reason: Error creating TzCache folder: '/home/runner/.cache/py-yfinance' reason: [Errno 17] File exists: '/home/runner/.cache/py-yfinance'. TzCache will not be used. Tip: You can direct cache to use a different location with 'set_tz_cache_location(mylocation)'
+2026-08-18 18:05:20,418 [INFO] Stored 97578 candle rows across 200 symbols.
+2026-08-18 18:05:20,724 [WARNING] Data cleaning: 0 one-day bad tick(s) flattened, 1 permanent level shift(s) rescaled for continuity.
+2026-08-18 18:05:21,231 [INFO] Scored 200 symbols for 2026-08-18_1805.
+2026-08-18 18:05:21,233 [WARNING] Regime filter enabled but no NIFTY50 index data available — run data_fetch.py --fetch-index. Proceeding WITHOUT the filter tonight.
+2026-08-18 18:05:21,249 [INFO] Apex200 run 2026-08-18_1805: 0 BUY signals out of 200 scored.
+2026-08-18 18:05:21,278 [INFO] Telegram not configured or failed — skipping notification.
+2026-08-18 18:05:21,278 [INFO] ===== nightly run finished in 18.5s. 0 buy signals. =====
+2026-08-18 18:05:21,847 [INFO] ===== myNSE200 nightly run started: 2026-08-18 18:05:21.847139 =====
+2026-08-18 18:05:27,302 [INFO] Universe size: 200 symbols.
+2026-08-18 18:05:39,074 [INFO] Stored 1994 candle rows across 200 symbols.
+2026-08-18 18:05:39,526 [INFO] Stored 4638 NIFTY50 index rows for regime filtering.
+2026-08-18 18:05:39,824 [WARNING] Data cleaning: 0 one-day bad tick(s) flattened, 1 permanent level shift(s) rescaled for continuity.
+2026-08-18 18:05:40,334 [INFO] Scored 200 symbols for 2026-08-18_1805.
+2026-08-18 18:05:40,357 [INFO] Apex200 run 2026-08-18_1805: 0 BUY signals out of 200 scored.
+2026-08-18 18:05:40,909 [INFO] ===== nightly run finished in 19.1s. 0 buy signals. =====
