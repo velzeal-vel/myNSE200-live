@@ -1,0 +1,57 @@
+name: myNSE200 Nightly Signal Run
+
+# Runs main.py once a night — the same strategy, same signal logic, same
+# risk rules as always. Nothing about WHAT it decides changed; this file
+# only controls WHEN and WHERE it runs (GitHub's servers, not your Mac).
+#
+# 23:30 IST = 18:00 UTC (India has no daylight saving, so this stays
+# correct year-round with no seasonal adjustment needed).
+
+"on":
+  schedule:
+    - cron: "0 18 * * *"
+  workflow_dispatch:  # adds a manual "Run workflow" button for testing
+
+permissions:
+  contents: write  # needed so this job can commit the updated database/output back
+
+jobs:
+  run-nightly:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Seed a starter database if this is the very first run
+        # If market_data.db doesn't exist yet in this repo, this does a
+        # one-time smaller backfill (500 days — plenty for every live
+        # indicator this strategy uses) instead of the full multi-year
+        # archive, keeping the repo small. Skipped automatically on every
+        # run after the first, once the database already exists.
+        run: |
+          if [ ! -f market_data.db ]; then
+            python3 data_fetch.py --update-universe
+            python3 main.py --seed-days 500 --skip-fundamentals
+          fi
+
+      - name: Run the nightly strategy
+        env:
+          MYNSE200_TG_TOKEN: ${{ secrets.MYNSE200_TG_TOKEN }}
+          MYNSE200_TG_CHAT_ID: ${{ secrets.MYNSE200_TG_CHAT_ID }}
+        run: python3 main.py
+
+      - name: Save the updated database and reports back to the repository
+        run: |
+          git config --local user.email "actions@github.com"
+          git config --local user.name "myNSE200 Automation"
+          git add market_data.db output/ run_log.txt 2>/dev/null || true
+          git diff --staged --quiet || git commit -m "Automated nightly run $(date -u +'%Y-%m-%d %H:%M UTC')"
+          git push
