@@ -1,0 +1,12 @@
+# Never commit real secrets — Telegram token/chat ID go in GitHub Secrets
+# instead, not in this file.
+.env
+
+# Local Python environment / cache — not needed on GitHub's runners,
+# they install fresh from requirements.txt every time.
+venv/
+__pycache__/
+*.pyc
+
+# macOS
+.DS_Store
