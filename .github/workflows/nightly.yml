@@ -30,6 +30,15 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Ensure a universe list exists
+        # Independent of the database check below — this makes sure
+        # data/nifty200.csv always exists before main.py needs it, even
+        # if it somehow didn't get saved on a previous run.
+        run: |
+          if [ ! -f data/nifty200.csv ]; then
+            python3 data_fetch.py --update-universe
+          fi
+
       - name: Seed a starter database if this is the very first run
         # If market_data.db doesn't exist yet in this repo, this does a
         # one-time smaller backfill (500 days — plenty for every live
@@ -38,7 +47,6 @@ jobs:
         # run after the first, once the database already exists.
         run: |
           if [ ! -f market_data.db ]; then
-            python3 data_fetch.py --update-universe
             python3 main.py --seed-days 500 --skip-fundamentals
           fi
 
@@ -52,6 +60,6 @@ jobs:
         run: |
           git config --local user.email "actions@github.com"
           git config --local user.name "myNSE200 Automation"
-          git add market_data.db output/ run_log.txt 2>/dev/null || true
+          git add market_data.db output/ run_log.txt data/nifty200.csv 2>/dev/null || true
           git diff --staged --quiet || git commit -m "Automated nightly run $(date -u +'%Y-%m-%d %H:%M UTC')"
           git push
