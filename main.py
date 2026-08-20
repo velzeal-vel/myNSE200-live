@@ -58,14 +58,6 @@ def run_nightly(full_history=False, skip_fundamentals=False, seed_days=None):
 
     db.init_db()
 
-    # 0. Process any Telegram replies (BUY/SKIP) since the last run — cheap,
-    # always safe to check, works even on manual/daytime runs so replies
-    # get processed promptly rather than only once a night.
-    processed = notifier.check_and_process_replies()
-    if processed:
-        print(f"Processed {len(processed)} Telegram repl{'y' if len(processed)==1 else 'ies'}: "
-              f"{', '.join(f'{action} {sym}' for action, sym, _ in processed)}")
-
     symbols = data_fetch.load_universe_snapshot()
     symbols = [s for s in symbols if not data_fetch.is_bse_debt_instrument(s)]
     log.info(f"Universe size: {len(symbols)} symbols.")
@@ -143,14 +135,13 @@ def run_nightly(full_history=False, skip_fundamentals=False, seed_days=None):
         cols = ["symbol", "overall_score", "entry_price", "stop_loss", "target_price", "quantity", "order_value"]
         print("\n" + report_df[report_df["status"]][cols].to_string(index=False))
 
-    # 5. Position tracking: expire stale pending signals, register today's
-    # new ones, check existing holdings for target/stop/time exits, then
-    # send the full portfolio-style Telegram message. None of this affects
-    # what strategy.py decided — it's purely tracking what happens next.
-    portfolio.expire_stale_pending()
-    new_symbols = portfolio.create_pending_from_signals(report_df, run_date)
+    # 5. Position tracking: auto-track today's new signals, check existing
+    # holdings for target/stop/time exits, then send a simple Telegram
+    # message. None of this affects what strategy.py decided — it's purely
+    # tracking what happens next.
+    new_signals = portfolio.create_holdings_from_signals(report_df, run_date)
     just_closed = portfolio.check_holding_exits()
-    notifier.notify_portfolio(run_date, new_symbols, just_closed)
+    notifier.notify_signals(run_date, new_signals, just_closed)
 
     elapsed = (datetime.now() - started).total_seconds()
     log.info(f"===== nightly run finished in {elapsed:.1f}s. {buy_count} buy signals. =====")
