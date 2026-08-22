@@ -143,6 +143,12 @@ def run_nightly(full_history=False, skip_fundamentals=False, seed_days=None):
     just_closed = portfolio.check_holding_exits()
     notifier.notify_signals(run_date, new_signals, just_closed)
 
+    # 6. Keep a plain, readable full history — every signal ever generated,
+    # open or closed. Just open output/signal_history.csv anytime to see
+    # the complete list; no database tools needed.
+    count = portfolio.export_history_csv(config.OUTPUT_DIR / "signal_history.csv")
+    log.info(f"Exported {count} total signal(s) to output/signal_history.csv")
+
     elapsed = (datetime.now() - started).total_seconds()
     log.info(f"===== nightly run finished in {elapsed:.1f}s. {buy_count} buy signals. =====")
 
