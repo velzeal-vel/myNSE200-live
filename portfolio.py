@@ -126,3 +126,27 @@ def get_holding():
     )
     conn.close()
     return df
+
+
+def export_history_csv(path):
+    """Writes every signal ever generated — open or closed — to a plain,
+    readable CSV. This is the full history you can just open and read,
+    no database tools needed. Updates automatically every nightly run."""
+    conn = db.get_conn()
+    df = pd.read_sql_query(
+        "SELECT signal_date AS date, symbol, signal_price AS entry, "
+        "stop_loss AS sl, target_price AS target, status, "
+        "exit_price, exit_date, exit_reason "
+        "FROM positions ORDER BY signal_date DESC, id DESC", conn
+    )
+    conn.close()
+
+    status_labels = {
+        "holding": "Open — waiting for target/SL/time exit",
+        "closed_target": "Closed — TARGET HIT",
+        "closed_stop": "Closed — STOP HIT",
+        "closed_time": "Closed — TIME EXIT (20-day limit)",
+    }
+    df["status"] = df["status"].map(status_labels).fillna(df["status"])
+    df.to_csv(path, index=False)
+    return len(df)
