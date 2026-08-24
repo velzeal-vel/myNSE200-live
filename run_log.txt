@@ -89,3 +89,13 @@
 2026-08-23 19:01:24,602 [INFO] Apex200 run 2026-08-23_1901: 0 BUY signals out of 200 scored.
 2026-08-23 19:01:26,227 [INFO] Exported 0 total signal(s) to output/signal_history.csv
 2026-08-23 19:01:26,227 [INFO] ===== nightly run finished in 10.9s. 0 buy signals. =====
+2026-08-24 19:19:20,715 [INFO] ===== myNSE200 nightly run started: 2026-08-24 19:19:20.714985 =====
+2026-08-24 19:19:20,718 [INFO] Universe size: 200 symbols.
+2026-08-24 19:19:20,721 [INFO] Failed to create TzCache, reason: Error creating TzCache folder: '/home/runner/.cache/py-yfinance' reason: [Errno 17] File exists: '/home/runner/.cache/py-yfinance'. TzCache will not be used. Tip: You can direct cache to use a different location with 'set_tz_cache_location(mylocation)'
+2026-08-24 19:19:33,922 [INFO] Stored 1800 candle rows across 200 symbols.
+2026-08-24 19:19:34,681 [INFO] Stored 4644 NIFTY50 index rows for regime filtering.
+2026-08-24 19:19:34,930 [WARNING] Data cleaning: 0 one-day bad tick(s) flattened, 1 permanent level shift(s) rescaled for continuity.
+2026-08-24 19:19:35,330 [INFO] Scored 200 symbols for 2026-08-24_1919.
+2026-08-24 19:19:35,399 [INFO] Apex200 run 2026-08-24_1919: 0 BUY signals out of 200 scored.
+2026-08-24 19:19:36,500 [INFO] Exported 0 total signal(s) to output/signal_history.csv
+2026-08-24 19:19:36,500 [INFO] ===== nightly run finished in 15.8s. 0 buy signals. =====
