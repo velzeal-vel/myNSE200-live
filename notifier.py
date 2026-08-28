@@ -45,7 +45,9 @@ def _estimated_exit_date():
     return (datetime.now() + timedelta(days=int(config.MAX_HOLDING_DAYS * 1.45))).strftime("%Y-%m-%d")
 
 
-def build_signal_message(run_date, new_signals, just_closed):
+def build_signal_message(run_date, new_signals, just_closed, dropped_stale=None, still_waiting=None):
+    dropped_stale = dropped_stale or []
+    still_waiting = still_waiting or []
     lines = [f"<b>Apex200 — {run_date}</b>\n"]
 
     if just_closed:
@@ -57,21 +59,32 @@ def build_signal_message(run_date, new_signals, just_closed):
             lines.append(f"    Entry ₹{pos['buy_price']:.2f} → Exit ₹{pos['exit_price']:.2f}  ({pnl_pct:+.1f}%)")
         lines.append("")
 
-    lines.append("🆕 <b>BUY SIGNAL</b>")
+    if dropped_stale:
+        n = len(dropped_stale)
+        lines.append(f"🗑 {n} pending stock(s) no longer qualify as a genuine signal and were "
+                      f"dropped, not bought stale: {', '.join(dropped_stale)}")
+        lines.append("")
+
+    if still_waiting:
+        n = len(still_waiting)
+        lines.append(f"📋 {n} stock(s) still waiting for a slot to open: {', '.join(still_waiting)}")
+        lines.append("")
+
     if new_signals:
+        lines.append("🆕 <b>BUY SIGNAL</b>")
         for sig in new_signals:
             lines.append(f"• <b>{sig['symbol']}</b>")
             lines.append(f"    Entry (est.): ₹{sig['entry_price']:.2f}")
             lines.append(f"    SL: ₹{sig['stop_loss']:.2f}  ·  Target: ₹{sig['target_price']:.2f}")
             lines.append(f"    Exit by: {_estimated_exit_date()} (sooner if SL/target hits first)")
-    else:
-        lines.append("None today.")
+    elif not just_closed:
+        lines.append("Nothing to report today — no new signals, no exits.")
 
     return "\n".join(lines)
 
 
-def notify_signals(run_date, new_signals, just_closed):
-    message = build_signal_message(run_date, new_signals, just_closed)
+def notify_signals(run_date, new_signals, just_closed, dropped_stale=None, still_waiting=None):
+    message = build_signal_message(run_date, new_signals, just_closed, dropped_stale, still_waiting)
     sent = send_telegram(message)
     if not sent:
         log.info("Telegram not configured or failed — skipping notification.")
