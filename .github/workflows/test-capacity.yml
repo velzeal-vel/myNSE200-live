@@ -1,0 +1,42 @@
+name: myNSE200 TEST Capacity Scenario (safe, self-cleaning)
+
+# Manual-only, one-time test — no schedule. Temporarily fills the
+# portfolio to 20/20 with clearly-fake TESTPOS symbols, simulates a
+# realistic signal night, sends you a real Telegram message showing the
+# waiting-list/stale-drop behavior, then deletes every test row it
+# created. Your real tracked positions are never touched — verified.
+
+"on":
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  test-capacity:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run the safe capacity test
+        env:
+          MYNSE200_TG_TOKEN: ${{ secrets.MYNSE200_TG_TOKEN }}
+          MYNSE200_TG_CHAT_ID: ${{ secrets.MYNSE200_TG_CHAT_ID }}
+        run: python3 test_capacity_scenario.py
+
+      - name: Save (nothing test-related should remain, but keep DB in sync)
+        run: |
+          git config --local user.email "actions@github.com"
+          git config --local user.name "myNSE200 Automation"
+          git add market_data.db 2>/dev/null || true
+          git diff --staged --quiet || git commit -m "Test capacity scenario run (self-cleaned) $(date -u +'%Y-%m-%d %H:%M UTC')"
+          git push
