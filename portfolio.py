@@ -6,11 +6,15 @@ top of the strategy, not a change to it. strategy.py still decides what
 qualifies exactly as before; this module just remembers it and watches
 for the exit (target/stop/time).
 
-SIMPLIFIED (Aug 2026): no more confirm/pending workflow — every new
-signal is auto-tracked as 'holding' immediately, using the calculated
-entry_price as the assumed buy price. No BUY/SKIP replies needed.
+SIMPLIFIED (Aug 2026): no confirm/BUY-SKIP-reply workflow — signals are
+auto-tracked. UPDATED (Aug 2026): now capacity-aware — when the portfolio
+is at MAX_OPEN_POSITIONS, new qualifying signals wait as 'pending' rather
+than being silently dropped or double-counted, and get re-validated
+against fresh scoring every night before actually being bought.
 
-Statuses: holding -> closed_target / closed_stop / closed_time
+Statuses: pending (waiting for a slot) -> holding -> closed_target /
+          closed_stop / closed_time
+          pending -> dropped_stale (no longer qualifies once re-checked)
 
 Nothing here affects entry_price/stop_loss/target_price/quantity — those
 still come entirely from strategy.py's calculation, unchanged.
@@ -32,41 +36,102 @@ logging.basicConfig(
 log = logging.getLogger("portfolio")
 
 
-def create_holdings_from_signals(report_df, run_date):
-    """Takes today's strategy.run() output and auto-tracks every status=True
-    signal as a new 'holding' immediately — using the calculated
-    entry_price as the assumed buy price. Returns the list of newly
-    tracked positions (as dicts) for the Telegram BUY SIGNAL section."""
-    if report_df.empty:
-        return []
+def process_signals_with_capacity(report_df, run_date, max_positions=None):
+    """The capacity-aware version: never lets total open positions exceed
+    max_positions. Order of priority each night:
+      1. Existing 'pending' signals (waiting for a slot) get RE-CHECKED
+         against tonight's fresh scoring — if they no longer qualify,
+         they're dropped (not silently bought stale later). If they still
+         qualify and a slot is free, they get promoted using TONIGHT's
+         fresh entry/stop/target, not the old numbers from when they
+         first signaled.
+      2. Brand-new signals from tonight then fill any remaining slots.
+      3. Anything left over (still qualifying, still no room) stays/goes
+         'pending' for another night.
 
+    Returns (new_buys, dropped_stale, still_waiting) — new_buys is what
+    just became actionable (promoted or brand-new with room), for the
+    BUY SIGNAL section; dropped_stale and still_waiting are for their own
+    message sections."""
+    max_positions = max_positions or config.MAX_OPEN_POSITIONS
     conn = db.get_conn()
-    existing = pd.read_sql_query(
-        "SELECT symbol FROM positions WHERE status = 'holding'", conn
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    holding_count = conn.execute(
+        "SELECT COUNT(*) FROM positions WHERE status='holding'"
+    ).fetchone()[0]
+
+    qualifies_today = {}
+    if not report_df.empty:
+        for _, row in report_df[report_df["status"] == True].iterrows():
+            qualifies_today[row["symbol"]] = row
+
+    new_buys, dropped_stale, still_waiting = [], [], []
+
+    # 1. Re-check existing pending signals first, oldest first (fair order)
+    pending = pd.read_sql_query(
+        "SELECT * FROM positions WHERE status='pending' ORDER BY signal_date ASC, id ASC", conn
+    )
+    for _, pos in pending.iterrows():
+        if pos["symbol"] in qualifies_today:
+            row = qualifies_today.pop(pos["symbol"])  # also removes it from "brand new" pool
+            if holding_count < max_positions:
+                conn.execute(
+                    "UPDATE positions SET status='holding', signal_price=?, stop_loss=?, "
+                    "target_price=?, quantity_recommended=?, quantity_bought=?, buy_price=?, "
+                    "buy_date=?, last_updated=? WHERE id=?",
+                    (row["entry_price"], row["stop_loss"], row["target_price"],
+                     int(row["quantity"]), int(row["quantity"]), row["entry_price"],
+                     today, datetime.now().isoformat(), pos["id"]),
+                )
+                holding_count += 1
+                new_buys.append({"symbol": pos["symbol"], "entry_price": row["entry_price"],
+                                  "stop_loss": row["stop_loss"], "target_price": row["target_price"]})
+            else:
+                still_waiting.append(pos["symbol"])
+        else:
+            conn.execute(
+                "UPDATE positions SET status='dropped_stale', last_updated=? WHERE id=?",
+                (datetime.now().isoformat(), pos["id"]),
+            )
+            dropped_stale.append(pos["symbol"])
+
+    # 2. Brand-new signals from tonight (whatever's left in qualifies_today
+    # after pending symbols were already popped out above)
+    existing_tracked = pd.read_sql_query(
+        "SELECT symbol FROM positions WHERE status IN ('holding', 'pending')", conn
     )["symbol"].tolist()
 
-    new_signals = []
-    buys = report_df[report_df["status"] == True]
-    today = datetime.now().strftime("%Y-%m-%d")
-    for _, row in buys.iterrows():
-        if row["symbol"] in existing:
-            continue  # already tracked, don't duplicate
-        conn.execute(
-            """INSERT INTO positions
-               (symbol, status, signal_date, signal_price, stop_loss, target_price,
-                quantity_recommended, quantity_bought, buy_price, buy_date, last_updated)
-               VALUES (?, 'holding', ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (row["symbol"], run_date, row["entry_price"], row["stop_loss"],
-             row["target_price"], int(row["quantity"]), int(row["quantity"]),
-             row["entry_price"], today, datetime.now().isoformat()),
-        )
-        new_signals.append({
-            "symbol": row["symbol"], "entry_price": row["entry_price"],
-            "stop_loss": row["stop_loss"], "target_price": row["target_price"],
-        })
+    for symbol, row in qualifies_today.items():
+        if symbol in existing_tracked:
+            continue  # already tracked from an earlier night, don't duplicate
+        if holding_count < max_positions:
+            conn.execute(
+                """INSERT INTO positions
+                   (symbol, status, signal_date, signal_price, stop_loss, target_price,
+                    quantity_recommended, quantity_bought, buy_price, buy_date, last_updated)
+                   VALUES (?, 'holding', ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (symbol, run_date, row["entry_price"], row["stop_loss"], row["target_price"],
+                 int(row["quantity"]), int(row["quantity"]), row["entry_price"], today,
+                 datetime.now().isoformat()),
+            )
+            holding_count += 1
+            new_buys.append({"symbol": symbol, "entry_price": row["entry_price"],
+                              "stop_loss": row["stop_loss"], "target_price": row["target_price"]})
+        else:
+            conn.execute(
+                """INSERT INTO positions
+                   (symbol, status, signal_date, signal_price, stop_loss, target_price,
+                    quantity_recommended, last_updated)
+                   VALUES (?, 'pending', ?, ?, ?, ?, ?, ?)""",
+                (symbol, run_date, row["entry_price"], row["stop_loss"], row["target_price"],
+                 int(row["quantity"]), datetime.now().isoformat()),
+            )
+            still_waiting.append(symbol)
+
     conn.commit()
     conn.close()
-    return new_signals
+    return new_buys, dropped_stale, still_waiting
 
 
 def get_latest_price(conn, symbol):
@@ -128,6 +193,15 @@ def get_holding():
     return df
 
 
+def get_pending():
+    conn = db.get_conn()
+    df = pd.read_sql_query(
+        "SELECT * FROM positions WHERE status='pending' ORDER BY signal_date ASC", conn
+    )
+    conn.close()
+    return df
+
+
 def export_history_csv(path):
     """Writes every signal ever generated — open or closed — to a plain,
     readable CSV. This is the full history you can just open and read,
@@ -146,6 +220,8 @@ def export_history_csv(path):
         "closed_target": "Closed — TARGET HIT",
         "closed_stop": "Closed — STOP HIT",
         "closed_time": "Closed — TIME EXIT (20-day limit)",
+        "pending": "Pending — waiting for a portfolio slot to open",
+        "dropped_stale": "Dropped — no longer qualified when re-checked",
     }
     df["status"] = df["status"].map(status_labels).fillna(df["status"])
     df.to_csv(path, index=False)
