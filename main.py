@@ -139,9 +139,16 @@ def run_nightly(full_history=False, skip_fundamentals=False, seed_days=None):
     # holdings for target/stop/time exits, then send a simple Telegram
     # message. None of this affects what strategy.py decided — it's purely
     # tracking what happens next.
-    new_signals = portfolio.create_holdings_from_signals(report_df, run_date)
+    # 5. Position tracking: check exits FIRST (frees up slots the same
+    # night), then process today's signals capacity-aware — re-checking
+    # any stocks still waiting for a slot before promoting or dropping
+    # them, and only taking on brand-new signals if room remains. None of
+    # this affects what strategy.py decided — purely what happens next.
     just_closed = portfolio.check_holding_exits()
-    notifier.notify_signals(run_date, new_signals, just_closed)
+    new_signals, dropped_stale, still_waiting = portfolio.process_signals_with_capacity(
+        report_df, run_date, config.MAX_OPEN_POSITIONS
+    )
+    notifier.notify_signals(run_date, new_signals, just_closed, dropped_stale, still_waiting)
 
     # 6. Keep a plain, readable full history — every signal ever generated,
     # open or closed. Just open output/signal_history.csv anytime to see
