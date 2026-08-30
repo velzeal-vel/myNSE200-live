@@ -129,14 +129,18 @@ REGIME_SMA_PERIOD = 200
 # improvement. Uses data/sector_map.csv (manually compiled — see that
 # file's own caveat; spot-check if precision matters to you).
 USE_SECTOR_CAP = True
-MAX_PER_SECTOR_PCT = 40.0        # today's volume >= 1.5x the 20-day avg volume
-# VALIDATED (Aug 2026): raised from 80 to 90 after a real finding — testing 80/90/95
-# across 6 independent 20-year folds showed 90 as the genuine CAGR peak (avg 21.66%
-# vs 18.49% at 80), while ALSO improving worst-case drawdown (-52.83% vs -58.58%).
-# Pushing to 95 traded CAGR away for extra safety instead of improving both, which is
-# how we know 90 is the peak rather than "higher is always better." Confirmed on a
-# genuine out-of-sample split (5 years never used for tuning): both CAGR and drawdown
-# held up or improved out-of-sample (22.28% CAGR, -25.91% DD vs 17.92%/-52.83% training).
+MAX_PER_SECTOR_PCT = 40.0
+
+# VALIDATED (Aug 2026): excludes the bottom X% of the current universe by average
+# daily traded value (price x volume) — directly motivated by survivorship_check.py's
+# finding that marginal, less-liquid constituents already underperform larger ones by
+# ~3.75 CAGR points, using only stocks still in today's list. Confirmed on a rolling
+# out-of-sample test: 4 of 5 independent 3-year windows improved (better CAGR, better
+# drawdown, or both), only one window showed a small decline in both — avg CAGR rose
+# from ~16.6% to ~18.0%. Filtering happens BEFORE scoring, so percentile-based cutoffs
+# (MIN_SCORE_PERCENTILE) apply to the reduced set, matching exactly what was tested.
+EXCLUDE_BOTTOM_LIQUIDITY_PCT = 25.0
+
 MIN_SCORE_PERCENTILE = 90           # only top 10% of scored universe qualify
 
 # --- Risk management ---
