@@ -178,3 +178,12 @@
 2026-08-29 18:01:17,923 [INFO] Apex200 run 2026-08-29_1801: 0 BUY signals out of 200 scored.
 2026-08-29 18:01:19,048 [INFO] Exported 0 total signal(s) to output/signal_history.csv
 2026-08-29 18:01:19,048 [INFO] ===== nightly run finished in 18.4s. 0 buy signals. =====
+2026-08-30 07:05:48,215 [INFO] ===== myNSE200 nightly run started: 2026-08-30 07:05:48.215527 =====
+2026-08-30 07:05:48,218 [INFO] Universe size: 200 symbols.
+2026-08-30 07:05:56,571 [INFO] Stored 1956 candle rows across 200 symbols.
+2026-08-30 07:05:56,974 [INFO] Stored 4649 NIFTY50 index rows for regime filtering.
+2026-08-30 07:05:57,266 [WARNING] Data cleaning: 0 one-day bad tick(s) flattened, 1 permanent level shift(s) rescaled for continuity.
+2026-08-30 07:05:57,704 [INFO] Scored 200 symbols for 2026-08-30_0705.
+2026-08-30 07:05:57,724 [INFO] Apex200 run 2026-08-30_0705: 0 BUY signals out of 200 scored.
+2026-08-30 07:05:58,962 [INFO] Exported 0 total signal(s) to output/signal_history.csv
+2026-08-30 07:05:58,962 [INFO] ===== nightly run finished in 10.7s. 0 buy signals. =====
