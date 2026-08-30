@@ -119,7 +119,17 @@ MIN_VOLUME_SURGE_RATIO = 1.5
 # (vs 22.28%/-25.91% without — similar CAGR, better drawdown). The 2008
 # crisis fold specifically improved from -52.83% to -16.84% drawdown.
 USE_REGIME_FILTER = True
-REGIME_SMA_PERIOD = 200        # today's volume >= 1.5x the 20-day avg volume
+REGIME_SMA_PERIOD = 200
+
+# VALIDATED (Aug 2026): sector concentration cap — no single sector's
+# currently-HELD positions can exceed this % of equity when a new signal
+# is being considered. Passed the same rolling out-of-sample test as the
+# regime filter: 4 of 5 independent 3-year windows improved or stayed
+# identical, only one showed a very minor CAGR dip alongside a drawdown
+# improvement. Uses data/sector_map.csv (manually compiled — see that
+# file's own caveat; spot-check if precision matters to you).
+USE_SECTOR_CAP = True
+MAX_PER_SECTOR_PCT = 40.0        # today's volume >= 1.5x the 20-day avg volume
 # VALIDATED (Aug 2026): raised from 80 to 90 after a real finding — testing 80/90/95
 # across 6 independent 20-year folds showed 90 as the genuine CAGR peak (avg 21.66%
 # vs 18.49% at 80), while ALSO improving worst-case drawdown (-52.83% vs -58.58%).
@@ -139,7 +149,12 @@ MIN_SCORE_PERCENTILE = 90           # only top 10% of scored universe qualify
 # future results — re-validate periodically as more data accumulates.
 ATR_PERIOD = 14
 ATR_STOP_MULTIPLIER = 3.0           # stop loss = entry - 3.0 * ATR14 (wider stop, fewer whipsaws)
-REWARD_RISK_RATIO = 1.0             # target = entry + 1.0 * risk (was 3:1 — 1:1 tested meaningfully better)
+REWARD_RISK_RATIO = 2.0             # VALIDATED Aug 2026: raised from 1.0 to 2.0 after slippage
+                                     # modeling was introduced — a wider target dilutes slippage's
+                                     # proportional bite. Confirmed via rolling out-of-sample (all
+                                     # 5 windows positive, ~16% avg CAGR vs ~13.5% at 1:1) AND a
+                                     # follow-up sweep that re-tested holding period, selectivity,
+                                     # and sector cap width under this new baseline — none beat it.
 USE_SWING_LOW_STOP_IF_TIGHTER = True  # use max(ATR stop, 10-day swing low) as the actual stop
 SWING_LOW_LOOKBACK_DAYS = 10
 
