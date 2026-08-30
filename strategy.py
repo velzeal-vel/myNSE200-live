@@ -46,6 +46,18 @@ import config
 import db
 import scoring
 
+
+def load_sector_map():
+    """Manually compiled symbol -> sector mapping (see data/sector_map.csv's
+    own header comment for the accuracy caveat). Used for the live sector
+    concentration cap. Returns None if the file doesn't exist."""
+    path = config.DATA_DIR / "sector_map.csv"
+    if not path.exists():
+        return None
+    import pandas as pd
+    df = pd.read_csv(path)
+    return dict(zip(df["symbol"], df["sector"]))
+
 logging.basicConfig(
     filename=config.LOG_FILE,
     level=logging.INFO,
@@ -115,8 +127,37 @@ def _compute_trade_plan(row):
     }
 
 
+def filter_by_liquidity(symbols):
+    """VALIDATED (Aug 2026): excludes the bottom config.EXCLUDE_BOTTOM_LIQUIDITY_PCT% of
+    the given symbols by average daily traded value (price x volume) — directly
+    motivated by survivorship_check.py's finding that marginal constituents already
+    underperform larger ones. Matches backtest.py's --exclude-bottom-liquidity-pct
+    exactly: filtering happens BEFORE scoring, so percentile-based cutoffs apply to
+    the reduced set, same as what was validated."""
+    if not config.EXCLUDE_BOTTOM_LIQUIDITY_PCT:
+        return symbols
+    conn = db.get_conn()
+    df = pd.read_sql_query(
+        "SELECT symbol, close, volume FROM candle WHERE symbol IN ({})".format(
+            ",".join("?" * len(symbols))
+        ), conn, params=symbols,
+    )
+    conn.close()
+    if df.empty:
+        return symbols
+    df["traded_value"] = df["close"] * df["volume"]
+    avg_value = df.groupby("symbol")["traded_value"].mean().sort_values(ascending=False)
+    cutoff = int(len(avg_value) * (1 - config.EXCLUDE_BOTTOM_LIQUIDITY_PCT / 100))
+    keep = set(avg_value.index[:cutoff])
+    filtered = [s for s in symbols if s in keep]
+    log.info(f"Liquidity filter: {len(symbols)} -> {len(filtered)} symbols "
+             f"(excluded bottom {config.EXCLUDE_BOTTOM_LIQUIDITY_PCT}% by traded value).")
+    return filtered
+
+
 def run(symbols, run_date=None):
     run_date = run_date or datetime.now().strftime("%Y-%m-%d")
+    symbols = filter_by_liquidity(symbols)
     scored = scoring.compute_scores(symbols, run_date=run_date)
     if scored.empty:
         log.warning("No scored data — did you run data_fetch and fundamentals first?")
@@ -138,6 +179,25 @@ def run(symbols, run_date=None):
                               f"{config.REGIME_SMA_PERIOD}-day average — no new entries tonight")
 
     score_cutoff = scored["overall_score"].quantile(config.MIN_SCORE_PERCENTILE / 100.0)
+
+    # Sector concentration gate: sum up what's ALREADYheld in each sector
+    # (real confirmed holdings, from portfolio.py) plus whatever this same
+    # run has already accepted, so several signals in one sector on the
+    # same night can't collectively blow past the cap either.
+    sector_map = None
+    sector_exposure = {}
+    if config.USE_SECTOR_CAP:
+        sector_map = load_sector_map()
+        if sector_map is None:
+            log.warning("USE_SECTOR_CAP is on but data/sector_map.csv is missing — "
+                        "proceeding WITHOUT the sector cap tonight.")
+        else:
+            import portfolio
+            holding = portfolio.get_holding()
+            for _, h in holding.iterrows():
+                sec = sector_map.get(h["symbol"])
+                if sec:
+                    sector_exposure[sec] = sector_exposure.get(sec, 0.0) + h["buy_price"] * h["quantity_bought"]
 
     conn = db.get_conn()
     signal_rows = []
@@ -170,6 +230,18 @@ def run(symbols, run_date=None):
             if plan is None or plan["quantity"] <= 0:
                 status = False
                 reasons.append("risk sizing produced zero quantity (stop too close / capital too small)")
+
+        if status and plan and sector_map is not None:
+            sym_sector = sector_map.get(symbol)
+            if sym_sector is not None:
+                current = sector_exposure.get(sym_sector, 0.0)
+                cap_value = config.ACCOUNT_CAPITAL * (config.MAX_PER_SECTOR_PCT / 100.0)
+                if current + plan["order_value"] > cap_value:
+                    status = False
+                    reasons.append(f"sector cap: {sym_sector} already at "
+                                    f"₹{current:,.0f}/₹{cap_value:,.0f} of the {config.MAX_PER_SECTOR_PCT}% limit")
+                else:
+                    sector_exposure[sym_sector] = current + plan["order_value"]
 
         record = {
             "symbol": symbol,
