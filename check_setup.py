@@ -51,11 +51,15 @@ def check_config():
         print("     If you intended to run the validated Nifty 200 setup, fix this in config.py.")
 
     # Compare against the actual validated settings from this project's testing —
-    # flags if this config.py has drifted from what was proven to work.
+    # flags if this config.py has drifted from what was proven to work. Only
+    # STRATEGY-SHAPE settings belong here (things validated by real backtesting) —
+    # MAX_PER_ORDER_PCT_OF_EQUITY and ACCOUNT_CAPITAL are deliberately NOT included,
+    # since those are meant to be personally customized for your own capital and
+    # would otherwise get wrongly flagged as "drift" every time you tune them.
     validated = {
-        "ATR_STOP_MULTIPLIER": 3.0, "REWARD_RISK_RATIO": 1.0,
-        "MIN_SCORE_PERCENTILE": 90, "MAX_PER_ORDER_PCT_OF_EQUITY": 20.0,
-        "UNIVERSE_INDEX": "nifty200",
+        "ATR_STOP_MULTIPLIER": 3.0, "REWARD_RISK_RATIO": 2.0,
+        "MIN_SCORE_PERCENTILE": 90, "UNIVERSE_INDEX": "nifty200",
+        "MAX_PER_SECTOR_PCT": 40.0, "EXCLUDE_BOTTOM_LIQUIDITY_PCT": 25.0,
     }
     drifted = []
     for key, expected in validated.items():
@@ -64,6 +68,8 @@ def check_config():
             drifted.append(f"{key}: expected {expected}, found {actual}")
     if not getattr(config, "USE_REGIME_FILTER", False):
         drifted.append("USE_REGIME_FILTER: expected True, found False/missing")
+    if not getattr(config, "USE_SECTOR_CAP", False):
+        drifted.append("USE_SECTOR_CAP: expected True, found False/missing")
     if drifted:
         print(f"\n  ⚠️  DRIFT FROM VALIDATED SETTINGS:")
         for d in drifted:
