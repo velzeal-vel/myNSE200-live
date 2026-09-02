@@ -257,3 +257,14 @@
 2026-09-01 18:01:57,190 [INFO] Apex200 run 2026-09-01_1801: 0 BUY signals out of 150 scored.
 2026-09-01 18:01:57,854 [INFO] Exported 0 total signal(s) to output/signal_history.csv
 2026-09-01 18:01:57,854 [INFO] ===== nightly run finished in 15.1s. 0 buy signals. =====
+2026-09-02 18:01:22,999 [INFO] ===== myNSE200 nightly run started: 2026-09-02 18:01:22.999732 =====
+2026-09-02 18:01:23,000 [INFO] Universe size: 200 symbols.
+2026-09-02 18:01:39,728 [INFO] Stored 2000 candle rows across 200 symbols.
+2026-09-02 18:01:40,234 [INFO] Stored 4652 NIFTY50 index rows for regime filtering.
+2026-09-02 18:01:40,341 [INFO] Liquidity filter: 200 -> 150 symbols (excluded bottom 25.0% by traded value).
+2026-09-02 18:01:40,545 [WARNING] Data cleaning: 0 one-day bad tick(s) flattened, 1 permanent level shift(s) rescaled for continuity.
+2026-09-02 18:01:40,879 [INFO] Scored 150 symbols for 2026-09-02_1801.
+2026-09-02 18:01:40,885 [WARNING] USE_SECTOR_CAP is on but data/sector_map.csv is missing — proceeding WITHOUT the sector cap tonight.
+2026-09-02 18:01:40,896 [INFO] Apex200 run 2026-09-02_1801: 0 BUY signals out of 150 scored.
+2026-09-02 18:01:42,256 [INFO] Exported 0 total signal(s) to output/signal_history.csv
+2026-09-02 18:01:42,256 [INFO] ===== nightly run finished in 19.3s. 0 buy signals. =====
