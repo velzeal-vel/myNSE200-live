@@ -30,6 +30,7 @@ import db
 import data_fetch
 import fundamentals
 import strategy
+import scoring
 import notifier
 import portfolio
 
@@ -57,6 +58,14 @@ def run_nightly(full_history=False, skip_fundamentals=False, seed_days=None):
     log.info(f"===== myNSE200 nightly run started: {started} =====")
 
     db.init_db()
+
+    # 0. Process any Telegram replies (BUY/SKIP) since the last run — cheap,
+    # always safe to check, works even on manual/daytime runs so replies
+    # get processed promptly rather than only once a night.
+    processed = notifier.check_and_process_replies()
+    if processed:
+        print(f"Processed {len(processed)} Telegram repl{'y' if len(processed)==1 else 'ies'}: "
+              f"{', '.join(f'{action} {sym}' for action, sym, _ in processed)}")
 
     symbols = data_fetch.load_universe_snapshot()
     symbols = [s for s in symbols if not data_fetch.is_bse_debt_instrument(s)]
@@ -127,6 +136,18 @@ def run_nightly(full_history=False, skip_fundamentals=False, seed_days=None):
     buy_count = int(report_df["status"].sum())
     print(f"\nApex200 run complete for {run_date}.")
     print(f"  {buy_count} BUY signal(s) out of {len(report_df)} scored stocks.")
+    # Explicit, unambiguous regime status in every single run's log — so
+    # "why zero signals" never requires a separate local check_setup.py run
+    # to answer; the answer is always right here, in GitHub's own logs.
+    if config.USE_REGIME_FILTER:
+        regime = scoring.check_market_regime()
+        if regime is None:
+            print(f"  Market regime: UNKNOWN (no index data) — regime filter had no effect tonight.")
+        elif regime:
+            print(f"  Market regime: BULL (Nifty 50 above its {config.REGIME_SMA_PERIOD}-day average).")
+        else:
+            print(f"  Market regime: BEAR (Nifty 50 below its {config.REGIME_SMA_PERIOD}-day average) "
+                  f"— this is why new signals are blocked, not a bug.")
     print(f"  CSV:  {csv_path}")
     print(f"  HTML: {html_path}")
     print(f"  (Also updated: apex200_latest.csv / apex200_latest.html)")
@@ -135,26 +156,14 @@ def run_nightly(full_history=False, skip_fundamentals=False, seed_days=None):
         cols = ["symbol", "overall_score", "entry_price", "stop_loss", "target_price", "quantity", "order_value"]
         print("\n" + report_df[report_df["status"]][cols].to_string(index=False))
 
-    # 5. Position tracking: auto-track today's new signals, check existing
-    # holdings for target/stop/time exits, then send a simple Telegram
-    # message. None of this affects what strategy.py decided — it's purely
-    # tracking what happens next.
-    # 5. Position tracking: check exits FIRST (frees up slots the same
-    # night), then process today's signals capacity-aware — re-checking
-    # any stocks still waiting for a slot before promoting or dropping
-    # them, and only taking on brand-new signals if room remains. None of
-    # this affects what strategy.py decided — purely what happens next.
+    # 5. Position tracking: expire stale pending signals, register today's
+    # new ones, check existing holdings for target/stop/time exits, then
+    # send the full portfolio-style Telegram message. None of this affects
+    # what strategy.py decided — it's purely tracking what happens next.
+    portfolio.expire_stale_pending()
+    new_symbols = portfolio.create_pending_from_signals(report_df, run_date)
     just_closed = portfolio.check_holding_exits()
-    new_signals, dropped_stale, still_waiting = portfolio.process_signals_with_capacity(
-        report_df, run_date, config.MAX_OPEN_POSITIONS
-    )
-    notifier.notify_signals(run_date, new_signals, just_closed, dropped_stale, still_waiting)
-
-    # 6. Keep a plain, readable full history — every signal ever generated,
-    # open or closed. Just open output/signal_history.csv anytime to see
-    # the complete list; no database tools needed.
-    count = portfolio.export_history_csv(config.OUTPUT_DIR / "signal_history.csv")
-    log.info(f"Exported {count} total signal(s) to output/signal_history.csv")
+    notifier.notify_portfolio(run_date, new_symbols, just_closed)
 
     elapsed = (datetime.now() - started).total_seconds()
     log.info(f"===== nightly run finished in {elapsed:.1f}s. {buy_count} buy signals. =====")
