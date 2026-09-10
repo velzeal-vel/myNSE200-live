@@ -36,6 +36,56 @@ logging.basicConfig(
 log = logging.getLogger("portfolio")
 
 
+def get_latest_price(conn, symbol):
+    row = conn.execute(
+        "SELECT close FROM candle WHERE symbol=? ORDER BY date DESC LIMIT 1", (symbol,)
+    ).fetchone()
+    return row[0] if row else None
+
+
+def check_holding_exits(max_holding_days=None):
+    """For every currently-tracked position, checks today's price against
+    its stop-loss, target, and the max-holding-days time exit — same
+    three exit rules strategy.py's backtest logic uses. Returns the list
+    of positions that just closed, for the Telegram EXIT section."""
+    max_holding_days = max_holding_days or config.MAX_HOLDING_DAYS
+    conn = db.get_conn()
+    holding = pd.read_sql_query("SELECT * FROM positions WHERE status='holding'", conn)
+
+    just_closed = []
+    today = datetime.now().strftime("%Y-%m-%d")
+    for _, pos in holding.iterrows():
+        price = get_latest_price(conn, pos["symbol"])
+        if price is None:
+            continue
+
+        exit_price, exit_reason = None, None
+        if price <= pos["stop_loss"]:
+            exit_price, exit_reason = pos["stop_loss"], "closed_stop"
+        elif price >= pos["target_price"]:
+            exit_price, exit_reason = pos["target_price"], "closed_target"
+        else:
+            buy_date = pos["buy_date"]
+            if buy_date:
+                days_held = (datetime.now() - datetime.fromisoformat(buy_date)).days
+                if days_held >= max_holding_days:
+                    exit_price, exit_reason = price, "closed_time"
+
+        if exit_price is not None:
+            conn.execute(
+                "UPDATE positions SET status=?, exit_price=?, exit_date=?, exit_reason=?, "
+                "last_updated=? WHERE id=?",
+                (exit_reason, exit_price, today, exit_reason, datetime.now().isoformat(), pos["id"]),
+            )
+            pos_dict = pos.to_dict()
+            pos_dict.update({"exit_price": exit_price, "exit_reason": exit_reason})
+            just_closed.append(pos_dict)
+
+    conn.commit()
+    conn.close()
+    return just_closed
+
+
 def process_signals_with_capacity(report_df, run_date, max_positions=None):
     """The capacity-aware version: never lets total open positions exceed
     max_positions. Order of priority each night:
@@ -134,69 +184,19 @@ def process_signals_with_capacity(report_df, run_date, max_positions=None):
     return new_buys, dropped_stale, still_waiting
 
 
-def get_latest_price(conn, symbol):
-    row = conn.execute(
-        "SELECT close FROM candle WHERE symbol=? ORDER BY date DESC LIMIT 1", (symbol,)
-    ).fetchone()
-    return row[0] if row else None
-
-
-def check_holding_exits(max_holding_days=None):
-    """For every currently-tracked position, checks today's price against
-    its stop-loss, target, and the max-holding-days time exit — same
-    three exit rules strategy.py's backtest logic uses. Returns the list
-    of positions that just closed, for the Telegram EXIT section."""
-    max_holding_days = max_holding_days or config.MAX_HOLDING_DAYS
+def get_pending():
     conn = db.get_conn()
-    holding = pd.read_sql_query("SELECT * FROM positions WHERE status='holding'", conn)
-
-    just_closed = []
-    today = datetime.now().strftime("%Y-%m-%d")
-    for _, pos in holding.iterrows():
-        price = get_latest_price(conn, pos["symbol"])
-        if price is None:
-            continue
-
-        exit_price, exit_reason = None, None
-        if price <= pos["stop_loss"]:
-            exit_price, exit_reason = pos["stop_loss"], "closed_stop"
-        elif price >= pos["target_price"]:
-            exit_price, exit_reason = pos["target_price"], "closed_target"
-        else:
-            buy_date = pos["buy_date"]
-            if buy_date:
-                days_held = (datetime.now() - datetime.fromisoformat(buy_date)).days
-                if days_held >= max_holding_days:
-                    exit_price, exit_reason = price, "closed_time"
-
-        if exit_price is not None:
-            conn.execute(
-                "UPDATE positions SET status=?, exit_price=?, exit_date=?, exit_reason=?, "
-                "last_updated=? WHERE id=?",
-                (exit_reason, exit_price, today, exit_reason, datetime.now().isoformat(), pos["id"]),
-            )
-            pos_dict = pos.to_dict()
-            pos_dict.update({"exit_price": exit_price, "exit_reason": exit_reason})
-            just_closed.append(pos_dict)
-
-    conn.commit()
+    df = pd.read_sql_query(
+        "SELECT * FROM positions WHERE status='pending' ORDER BY signal_date ASC", conn
+    )
     conn.close()
-    return just_closed
+    return df
 
 
 def get_holding():
     conn = db.get_conn()
     df = pd.read_sql_query(
         "SELECT * FROM positions WHERE status='holding' ORDER BY buy_date DESC", conn
-    )
-    conn.close()
-    return df
-
-
-def get_pending():
-    conn = db.get_conn()
-    df = pd.read_sql_query(
-        "SELECT * FROM positions WHERE status='pending' ORDER BY signal_date ASC", conn
     )
     conn.close()
     return df
