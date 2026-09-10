@@ -2,10 +2,11 @@
 myNSE200 / notifier.py
 ------------------------
 Telegram notifications. SIMPLIFIED (Aug 2026): no more BUY/SKIP reply
-handling, no pending list, no portfolio summary — just two things:
-new buy signals (with everything needed to act on them), and exit alerts
-when a tracked position hits target/stop/time. Nothing here changes what
-Apex200 decides — purely how results are communicated.
+handling, no pending list confirmation step — signals are auto-tracked.
+UPDATED (Aug 2026): capacity-aware messaging — shows stocks still waiting
+for a portfolio slot, and stocks dropped as stale after re-checking.
+Nothing here changes what Apex200 decides — purely how results are
+communicated.
 """
 
 import logging
